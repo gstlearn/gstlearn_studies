@@ -1,0 +1,503 @@
+---
+title: "Demo#4-Kriging"
+subtitle: "Omnidirectional Kriging"
+author: "Jeffrey Yarus"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document: 
+    highlight: tango
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+    toc_depth: 6
+  html_document: default
+  word_document: 
+    toc: yes
+    toc_depth: '6'
+  always_allow_html: yes
+---
+
+# Demo Summary
+
+In this demonstration, the objective is to create a Kriged map and it's associated error variance map. Here, the code begins as usual by reading in the data set, creating the assignment variables, identifying outliers, and removing the outliers. We are now ready to create variograms. **Please be sure to read through the text I have included before each code chunk.**  
+
+**Run the entire code chunk by chunk.** The variable P_PHI_pct is already in place and ready to run. The variogram model and kriging parameters are already set. **Erase your Global Environment before beginning**
+  
+**Perform Omnidirectional kriging of P_PHI_pct** For variogram modeling the best models to use are the:
+    - Exponential
+    - Spherical
+    - Cubic
+    - Stable
+  - Be sure the data base you select has omitted any outliers
+    
+**Note which variogram model types generated the "best results" for omnidirectional kriging** (just through visual inspection, you don't have to do bootstrapping)
+
+# Terminology and key functions from this Demo
+
+1. **Kriging** 
+    - The geostatistical interpolation method
+2. **Unique Neighborhood**
+    - Kriging requires knowledge of the neighbors it will use for estimating the values at each grid cell. The default parameter is called a, "Unique" neighborhood which instructs kriging to use all the data in the study area.  In this case, the number of samples is considered small, so we can use all the data.  In other cases, you will want to establish a moving neighborhood which restricts the number of samples to use in the estimation around a grid cell.  
+3. **Kriging Estimate** 
+    - The value determined from the kriging equation at a given location.  The estimage is optimized and considered the, "Best Linear, Unbiased Estimate.
+4. **Error Estimate** 
+    - The value of the variance or standard deviation determined from the kriging equation at a given location.  The Error Variance is usually reported in terms of the standard deviation as the standard deviation is in the same units as the original variable.
+
+# Loading Packages
+
+Run the chunk below...
+
+```{r include = FALSE}
+library(corrplot)
+library(PerformanceAnalytics)
+library(tidyverse)
+library(fastDummies)
+library(magrittr)
+library(GGally)
+library(ggplot2)
+library(RColorBrewer)
+library(knitr)
+library(ggpubr)
+library(RGeostats)
+library(gridGraphics)
+library(here)
+
+here()
+```
+    
+# Initializing the Demo
+
+As in the previous demos, we:
+
+  - Read in our data
+  - Create the tibble
+  - Ensure our categorical variables are designated as factors
+  - Create a backup data frame
+  - Remove the unnecessary variables from the tibble
+  - Create our assigned symbolic names
+  - Identify the outliers. all of this is being done in one code chunk
+  
+  Run the chunk below...
+
+```{r }
+file.name <- "../../data/WT-2D-all-outlier.csv"
+df <- read_csv(file.name)
+df %<>%
+  mutate(across(matches("N_|L_"), factor))
+head(df, n = 20)
+
+# Creating a duplicate tibble for later use, but eliminate unnecessary variables
+
+df2 <- df %>%
+  dplyr::select(L_3_FACIES:P_Top_ft)
+
+# Creating Symbolic Inputs
+
+xlon <- "C_X_ft"
+ylat <- "C_Y_ft"
+out_analysis <- "Raw (outlier analysis performed on raw data)"
+property <- "P_PHI_pct" # The property you are selecting for analysis
+
+# Idnetifying the outliers
+
+df <-
+  df %>%
+  mutate(
+    iqr_val = IQR(!!sym(property)),
+    # calculates the IQR value
+    iqr_val_adj = ((iqr_val) * 1.5),
+    third_q = quantile(!!sym(property), prob = 0.75, na.rm = TRUE),
+    first_q = quantile(!!sym(property), prob = .25, na.rm = TRUE),
+    # Creating a column of True and False, True = an outlier, False = not an
+    #outlier
+    outlier =
+      (!!sym(property)) > (third_q + iqr_val_adj) |
+      (!!sym(property) < (first_q - iqr_val_adj))
+  )
+
+df
+```
+
+________________________________________________________________________________
+________________________________________________________________________________
+
+## **Code chucks that apply to lognormal data only**
+
+The variable, P_PHI_pct is roughly symetrically distributed.  If you decide to try a different variable, you need to check to see if it is symetrically distributed.  If it is not, and the variable data are symmetrically distributed YOU MAY SKIP THE NEXT TWO CHUNKS!!!
+
+Adding the log of a right-skewed (~normally distributed) variable
+This property will be added to the data frame for the purpose of identifying the outlier. However, it's only useful if the variable being evaluated is log-normally distributed.  should you decide to change the variable under investigation from P_PHI_pct to P_KH_md, then this section becomes relevant.
+
+ADJUSUTING FOR THE MIN AND MAX WITHOUT THE OUTLIER
+Once the outlier is found, in order to identify the proper interquartile range (without the outlier), we need to redefine the max and min values.  Note, again, this is operating on the Log_property in case the variable under investigation is log-normally distributed.
+
+Run the code chunk below **if the variable you have selected is log-nomrally distributed, uncomment the code chunk below and run it. This will take the log of the variable temporarily just to correctly identify outliers.**
+
+```{r warning = FALSE}
+# df <-
+#   df %>%
+#   mutate(Log_property = log(!!sym(property)))
+# 
+# df <-
+#   df %>%
+#   mutate(
+#     maxval_trans = max(Log_property),
+#     # not necessary to calculate max
+#     minval_trans = min(Log_property),
+#     # not necessary to calculate min
+#     iqr_val_trans = IQR(Log_property),
+#     # calculates the IQR value
+#     iqr_val_adj_trans = ((iqr_val_trans) * 1.5),
+#     third_q_trans = quantile(Log_property, prob = 0.75, na.rm = TRUE),
+#     first_q_trans = quantile(Log_property, prob = .25, na.rm = TRUE),
+#     outlier =
+#       (Log_property) > (third_q_trans + iqr_val_adj_trans) |
+#       (Log_property) < (first_q_trans - iqr_val_adj_trans)
+#   ) %>%
+#   dplyr::select(-maxval_trans:-first_q_trans)
+```
+## **End of code chunks for log-normally distributed data data**
+________________________________________________________________________________
+________________________________________________________________________________
+
+#  Working in R S4 - Preparation for Geostatistical Analysis using RGeostats
+
+## Creating the Databases and Basemap
+
+The following chunk creates two databases, one **with outliers,** and one **without outliers** from a data frame and assigns the location of the coordinates and the selected mapping variable ("property").  Then, the basemap with no outlier is plotted  for reference.
+
+Run the code chunk below...
+
+# creating databases with and without the outlier
+```{r warning = FALSE}
+# creating a database with the outlier
+db <-
+  df %>%
+    dplyr::select(-F_Top) %>% 
+  db.create() %>%
+  db.locate(c(xlon, ylat), "x") %>%
+  db.locate(names = property, loctype = "z")
+#db@locators
+
+# Creating databases with no outliers
+
+db_noout.db <-
+  df %>%
+  dplyr::select(-F_Top) %>% # provides a set of tools for efficiently
+  #manipulating datasets in R
+  filter(outlier == FALSE) %>%  # When FALSE, outliers will be "filtered out."
+  db.create() %>%
+  db.locate(c(xlon, ylat), "x") %>% 
+  db.locate(names = property, loctype = "z")
+
+db.plot(
+  db_noout.db,            # To see the outlier, use 'db' 
+  name.color = property, 
+  asp = 1.05,
+  pos.legend = 1,
+  cex = 0.5,
+  xlim = c(0, 20000),
+  ylim = c(0, 40000),
+  pch = 19, 
+  xlab = "X (UTM)", 
+  ylab = "Y (UTM)", 
+  title = paste("Basemap Color-coded by", property, "with No Outlier"))
+```
+To determine the ceiling of the grid (or the coordinates of the upper-right corner), I wrote a roundUp() function that take the largest value in both selected C_X and C_Y column and find the nearest 10, 100, 1000, etc. that's larger than the largest value. The purpose of this code is to establish the extents of the data so we can build a grid.
+
+# Variogram Construction and modeling
+
+## Omnidirectional Experimental Semivariogram
+
+The code chunks below calculate and plot the variograms.  Initially, they do not correct for outliers.  Replace the database (db) with the database that removes the outliers (db_noout.db). Observe the impact.  
+
+Run the chunk below...
+
+```{r, warning = FALSE}
+vario.omni <- vario.calc(db_noout.db, nlag = 10)
+plot(
+  vario.omni,
+  type = "o",
+  pch = 19,
+  cex = .7,
+  npairpt = TRUE,
+  npairdw = FALSE,
+  title = paste(property, "Experimental Ominidirectional Variogram"),
+  xlab = "Log distance",
+  ylab = expression(paste("Variance (", gamma, "(h))", sep = ""))
+)
+```
+## Modeling the Experimental Semivariogram
+
+# Selecting the variogram model(s)
+
+Run the chunk below...
+
+```{r}
+melem.name()
+```
+
+
+Run the chunk below... Note the assignment variable, **"struct"** is then seen in the **Values section** of the Global Environment.
+
+```{r}
+struct <- c(2)
+```
+
+Note, if you included many basic structures into the auto-fitting algorithm of RGeostats, model.auto() will try to fit every included structure and pick out the best fit to plot with the experimental variogram.
+
+### Omnidirectional Variogram Model 
+
+Be sure to look at the information printed out on the omnidirectional variogram.  
+
+Run the chunk below...
+
+```{r, warning = FALSE}
+data.model.omni <-
+  model.auto(
+    vario.omni,
+    struct = struct,
+    title = paste(property, "Model Omnidirectional"),
+    pos.legend = 1,
+    xlab = "Lag distance",
+    ylab = expression(paste("Variance (", gamma, "(h))", sep = ""))
+  )
+data.model.omni
+```
+
+We can more fully annotate the variograms; change the curve colors, line type and width, subtitles, enhanced legends, etc. Below is an examplae. 
+
+```{r warning = FALSE}
+# Step 1: Fit the model without auto-plotting
+data.model.omni <- model.auto(
+  vario.omni,      # This is your omnidirectional experimental variogram object
+  struct = struct,
+  draw = FALSE,
+  compute = TRUE
+)
+
+# Step 2: Plot experimental variogram
+plot(
+  vario.omni,
+  col = "black",
+  lwd = 1,
+  xlab = "Lag distance",
+  ylab = expression(paste("Variance (", gamma, "(h))", sep = "")),
+  main = paste(property, "Model Omnidirectional")
+)
+
+# ✅ Add model type as a subtitle
+mtext("Model type: Spherical", side = 3, line = 0.5, cex = 0.9)
+
+
+# Step 3: Extract lag distances
+lags <- vario.omni@vardirs[[1]]@hh  # vardirs holds a list of directional 
+                          # variograms (including omnidirectional)
+                          # hh is a numeric vector representing the lag centers.
+                          # It’s stored as a list — hence the double brackets. 
+
+# Step 4: Evaluate model values at those lags
+model_vals <- model.eval(
+  lags,
+  model = data.model.omni
+)
+
+# Step 5: Add the model curve (dashed red line)
+lines(
+  x = lags,
+  y = model_vals,
+  col = "red",
+  lwd = 2,
+  lty = 2
+)
+
+# Step 6: Extract experimental γ(h) values
+gamma_exp <- vario.omni@vardirs[[1]]@gg
+
+# Step 7: Compute squared differences
+squared_diff <- (gamma_exp - model_vals)^2
+
+# Step 8: Overlay squared differences as black open circles
+# Step 8: Overlay black open circles directly on the experimental curve
+points(
+  x = lags,
+  y = gamma_exp,
+  pch = 21,
+  col = "black",
+  cex = 1.2
+)
+
+legend(
+  "bottomright",
+  legend = c("Experimental", "Model", "Lag Centroids"),
+  col = c("black", "red", "black"),
+  lty = c(1, 2, NA),      # no line for points
+  lwd = c(1, 2, NA),
+  pch = c(NA, NA, 1),     # only third item is a symbol
+  pt.cex = c(NA, NA, 1.2),
+  bty = "n"
+)
+
+```
+
+# Unique neighborhood
+
+In the chunk below, we're going to create a unique neighborhood using function neigh.create() with type "0" for Unique Neighborhood and nidm = 2 as we are in two dimensions.  Recall, a unique neighborhood uses all the data.
+
+Run the chunk below...
+
+```{r}
+neigh.unique <- neigh.create(type = 0, ndim = 2)
+```
+
+At the same time, if you want to experiment with creating a moving neighborhood for further purposes you may. Because there's not a need for moving neighborhood in this script, it's best to comment it out to decrease the running time of the program.
+
+Moving Neighborhood
+The inactive code below can be used to construct a moving neighborhood
+
+```{r}
+#neigh.moving = neigh.create(ndim=2,nmaxi=10,radius=20,
+#                            flag.sector=TRUE,nsect=8,nsmax=2)
+```
+
+# Kriging
+
+Kriging is the geostatistical interpolation method that uses the variogram to weight neighboring data by distance and azimuth. (azimuth is an angular measurement in a spherical coordinate system). 
+
+The different about Kriging comes from the fact that the weights come from the spatial (variogram) model using the following equation:
+                    Z(0) = SUM(i=1 to n)(lambda(i)*Z(i))
+
+## Creating the Grid for Kriging
+
+## Determining the extents of the data for grid constructon 
+
+Run the chunk below...
+
+```{r rounding}
+roundUp <- function(x, round = 1:10) {
+  increment <- head(round[which(x <= 10 ^ floor(log10(x)) * round)], 1)
+  10 ^ floor(log10(x)) * increment
+}
+roundDown <- function(x, round = 1:10) {
+  increment <- tail(round[which(x >= 10 ^ floor(log10(x)) * round)], 1)
+  10 ^ floor(log10(x)) * increment
+}
+
+x_ceil <- df %>%
+  # pull() always returns a vector (unlike 'select()' which
+  # returns a data frame).  Here, it extracts the column which has the name
+  # "C_X_ft" which is stored in the variable called "xlon."
+  pull(xlon) %>%
+  max() %>%
+  roundUp()
+
+x_floor <- df %>%
+  pull(xlon) %>%
+  min() %>%
+  roundDown()
+
+y_ceil <- df %>%
+  pull(ylat) %>%
+  max() %>%
+  roundUp()
+
+y_floor <- df %>%
+  pull(ylat) %>%
+  min() %>%
+  roundDown()
+```
+
+## Setting the grid cell size
+
+Run the chunk below...
+
+```{r, warning = FALSE}
+dbgrid2 <-
+  db.grid.init(
+    db_noout.db,
+    dcell = c(100, 100),
+    origin = c(x_floor, y_floor),
+    extend = c(x_ceil, y_ceil)
+  )
+migrate(
+  dbin = db_noout.db,
+  dbout = dbgrid2,
+  names = c("L*", "D*", "P*"),
+  radix = ""
+)
+```
+## Kriging the variable of interest
+
+The chunk of code below performs kriging of the selected property on a grid. It takes about a minute to run.  Because of the small number of data, the kriging in this script will be performed in Unique Neighborhood. The use of the **radix** enables the creation of a second set of variables avoiding the confusion with those that already exist. Note below, radix = "Omni" creates a set of variables with the prefix, "Omni.P_PHI_pct."  Look at the results of dbgrid3 once the code is run. You can see the two variables it created; Omni.P_PHI_pct.estim and Omni.P_PHI_pct.stdev.  Now, all we need to do is map them.
+
+Run the chunk below...
+
+```{r, warning = FALSE}
+dbgrid3 <-
+  kriging(
+    db_noout.db, 
+    dbgrid2, 
+    data.model.omni, 
+    neigh.unique, 
+    radix = "Omni")
+dbgrid3
+```
+
+From that we can plot the kriged map
+
+Run the chunk below...
+
+```{r, warning = FALSE}
+plot(
+  dbgrid3,
+  xlim = c(-20000,40000),
+  pos.legend = 7,
+  cex = 1,
+  title =
+    paste(property, "Kriging with omni-directional Model")
+  
+)
+plot(
+  dbgrid3,
+  name.contour = paste("Omni.", property, ".estim", sep = ""),
+  col = ("red") ,
+  add = TRUE
+)
+
+plot(
+  db_noout.db,
+  add = TRUE,
+  pch = 19,
+  cex = 0.2,
+  name.post = property
+)
+```
+
+```{r, warning = FALSE}
+dbgrid4 <- dbgrid3
+dbgrid4 <- db.locate(dbgrid4, 5, "z")
+plot(
+  dbgrid4,
+  xlim = c(-20000,40000),
+  pos.legend = 7,
+  cex = 0.7,
+  title =
+    paste(property, "Kriging Error Variance Model")
+)
+plot(
+  dbgrid4,
+  name.contour = paste("Omni.", property, ".stdev", sep = ""),
+  col = ("black") ,
+  nlevels = 5,
+  add = TRUE
+)
+plot(
+  db_noout.db,
+  add = TRUE,
+  pch = 1,
+  name.post = property,
+  col = "black",
+  size = 1,
+  cex = 0.4
+)
+```

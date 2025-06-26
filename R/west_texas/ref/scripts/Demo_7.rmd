@@ -1,0 +1,184 @@
+---
+title: "Cran_Klovan_Final"
+author: "Jeffrey Yarus"
+date: "2024-07-25"
+output: pdf_document
+---
+
+```{r}
+#loading data
+data("Klovan_Row80", package = "klovan")
+data("Klovan_2D_all_outlier", package = "klovan")
+
+#apply a range transform to your data 
+klovan <- klovan::range_transform(Klovan_Row80)
+
+```
+
+- Eigenvectors:   also called Principal Components
+- Eigenvalues:    the factor by which the eigenvector is scaled
+
+```{r}
+cov_mtrx <- klovan::covar_mtrx(klovan)
+cov_mtrx
+```
+
+```{r}
+#calulate Eiegn values
+klovan::calc_eigenvalues(cov_mtrx)
+
+```
+
+```{r}
+eigen_data <- klovan::eigen_contribution(klovan)
+eigen_data
+```
+
+```{r}
+klovan::scree_plot(eigen_data)
+```
+
+```{r}
+klovan::scree_plot(eigen_data, bar_fill = "green", outline = "darkgreen", eigen_line = "lightblue")
+```
+
+```{r}
+#make a correlation Matrix
+
+klovan::cor_mtrx(Klovan_Row80)
+```
+
+```{r}
+klovan::pc_cor_plot(Klovan_Row80, "PC1", "PC2")
+```
+
+```{r}
+#factor analysis 
+
+klovan::factor_analysis(Klovan_Row80)
+
+```
+
+```{r warning = FALSE, message = FALSE}
+#make correlation plot using factor data
+klovan::factor_cor_plot(klovan::factor_analysis(Klovan_Row80), "FAC1", "FAC2")
+```
+
+```{r warning = FALSE, message = FALSE}
+#customize color choices 
+klovan::factor_cor_plot(Klovan_Row80, "FAC1", "FAC3", text_col = "pink", line_col = "red")
+```
+
+```{r warning = FALSE, message = FALSE}
+#use inverse distance weighted method for interpolation
+
+inv_dis_data <- klovan::inv_dis_wt(Klovan_Row80, 3)
+```
+
+```{r}
+summary(inv_dis_data) #view data summary
+```
+
+```{r}
+library(ggforce)
+library(tidyverse)
+
+
+klovan::factor_score_plot(inv_dis_data, FALSE, data = Klovan_Row80) + ggforce::geom_ellipse(
+    aes(x0 = 3900, y0 = 1700, a = 600, b = 400, angle = pi/2.5),
+    color = "white")
+```
+
+```{r}
+klovan::factor_score_plot(inv_dis_data, TRUE, data = Klovan_Row80) + ggforce::geom_ellipse(
+    aes(x0 = 3900, y0 = 1700, a = 600, b = 400, angle = pi/2.5),
+    color = "white") +
+  ggforce::geom_circle(
+    aes(x = NULL, y = NULL, x0 = 3300, y0 = 3500, r = 400),
+  color = "white", 
+  inherit.aes = FALSE)
+```
+
+
+```{r}
+#plot variogram for use in kriging
+klovan::vario_plot(Klovan_Row80, factor = 1, nugget = .214, nlags = 10, sill = 7.64507, range_val = 6271.83, model_name = "Gau1")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Load required packages
+library(tidyverse)
+library(klovan)
+
+# Use tryCatch to suppress errors and continue execution
+krig_data <- tryCatch({
+  klovan::kriging.auto(Klovan_Row80, 3)
+}, error = function(e) {
+  message("An error occurred but was suppressed.")
+  return(NULL)  # Return NULL or any value if needed in case of error
+})
+
+# If kriging succeeds, view summary
+if (!is.null(krig_data)) {
+  summary(krig_data)
+} else {
+  message("Kriging failed but continued.")
+}
+```
+
+```{r}
+klovan::factor_score_plot(krig_data, TRUE, data = Klovan_Row80) + ggforce::geom_ellipse(
+    aes(x0 = 3900, y0 = 1700, a = 600, b = 400, angle = pi/2.5),
+    color = "white") +
+  ggforce::geom_circle(
+    aes(x = NULL, y = NULL, x0 = 3300, y0 = 3500, r = 400),
+  color = "white", 
+  inherit.aes = FALSE)
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+#install.packages("Klovan_0.0.9.tar.gz", repos = NULL, type = "source")
+library(klovan)
+```
+
+```{r, warning = FALSE, message = FALSE}
+library(RGeostats)
+data("Klovan_Row80", package = "klovan")
+#Klovan_Row80 <- load(file = "~/CSE_MSE_RXF131/cradle-members/sdle/jeg165/git/klovan/packages/Klovan0.0.9/data/Klovan_Row80.rda")
+```
+
+```{r, warning = FALSE, message = FALSE}
+# Building a database based on RC1 factor
+db <- Rgeo_database(Klovan_Row80, 3, "RC1")
+```
+
+```{r, warning = FALSE, message = FALSE}
+# Construct and plot the experimental variogram
+Rgeo_vario_construct_plot(db, 3, "RC1", lag = 500)
+```
+
+```{r, warning = FALSE, message = FALSE}
+# Fit the variogram model based on experimental variogram
+model <- Rgeo_vario_model(db, 3, "RC1", lag = 500, model = 13)
+```
+
+```{r,  warning = FALSE, message = FALSE}
+print(model)
+```
+
+```{r,  warning = FALSE, message = FALSE}
+krig <- Rgeo_kriging(db, model)
+```
+
+```{r,  warning = FALSE, message = FALSE}
+print(krig)
+```
+
+```{r,  warning = FALSE, message = FALSE}
+# Plot the kriging estimation results
+Rgeo_kriging_plot(krig, db, "RC1")
+```
+
+

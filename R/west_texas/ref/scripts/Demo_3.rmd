@@ -1,0 +1,293 @@
+---
+title: "Demo-3"
+subtitle: "Variograms"
+author: "Jeffrey Yarus"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document: 
+    highlight: tango
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+    toc_depth: 6
+  html_document: default
+  word_document: 
+    toc: yes
+    toc_depth: '6'
+  always_allow_html: yes
+---
+
+# Demo Summary
+
+In this demo, the objective is to become familiar with how to construct both omnidirectional and directional variograms.   
+
+Here, the code begins as usual by reading in the data set, creating the assignment variables, identifying outliers, and removing the outliers. We are now ready to create variograms.  **Please be sure to read through the text I have included before each code chunk. .**  
+
+First, run the script chunk by chunk.  After the initial data frames are calculated, I create a data base called db as we did in the previous demo. This data base looks a lot like the data frame df and, as you recall, it contains the outliers.  You will see that I correct for the outliers and create a data base without the outliers called **db_noout.db**.  You will need to walk through the chunks one-at-a-time and change **db** in each chunk to **db_noout.db** in order to see the impact without the outlier. Take your time and feel free to swap the data bases back and forth to see the impact with the outlier and without. 
+
+# Terminology, packages, and key functions from this Demo
+
+1. **Variogram Map** :  A Variogram map is a graph that that displays the change in variance in all directions from the origin located at its center. It is actually a polar plot and requires a "lot" of data to produce, so data sets that are sparse will not be very useful.  Grid data, like satellite images, gravity, magnetics, geophysical surveys etc. produce excellent variogram maps.   
+
+# Loading Packages
+
+Run the code chunk below...
+
+```{r include = FALSE}
+library(corrplot)
+library(PerformanceAnalytics)
+library(tidyverse)
+library(fastDummies)
+library(magrittr)
+library(GGally)
+library(ggplot2)
+library(RColorBrewer)
+library(knitr)
+library(ggpubr)
+library(RGeostats)
+library(here)
+
+setwd('/mnt/vstor/CSE_MSE_RXF131/cradle-members/sdle/jmy41/GIT/jmy-research/topics/RPS_N58')
+```
+
+
+```{r}
+getwd()
+```
+
+
+As in the previous demos, we:
+
+- Read in our data
+- Create the tibble
+- Ensure our categorical variables are designated as factors
+- Create a backup data frame
+- Remove the unnecessary variables from the tibble
+- Create our assigned symbolic names
+- Identify the outliers. all of this is being done in one code chunk.
+
+Run the chunk below...
+
+```{r }
+file.name <- "../../data/WT-2D-all-outlier.csv"
+df <- read_csv(file.name)
+df %<>%
+  mutate(across(matches("N_|L_"), factor))
+head(df, n = 20)
+
+# Creating a duplicate tibble for later use, but eliminate unnecessary variables
+
+df2 <- df %>%
+  dplyr::select(L_3_FACIES:P_Top_ft)
+
+# Creating Symbolic Inputs
+
+xlon <- "C_X_ft"
+ylat <- "C_Y_ft"
+out_analysis <- "Raw (outlier analysis performed on raw data)"
+property <-
+  "P_PHI_pct" # The property you are selecting for analysis
+
+## Data Analytics - Managing outliers
+
+df <-
+  df %>%
+  mutate(
+    iqr_val = IQR(!!sym(property)),
+    # calculates the IQR value
+    iqr_val_adj = ((iqr_val) * 1.5),
+    third_q = quantile(!!sym(property), prob = 0.75, na.rm = TRUE),
+    first_q = quantile(!!sym(property), prob = .25, na.rm = TRUE),
+    # Creating a column of True and False, True = an outlier, False = not an
+    #outlier
+    outlier =
+      (!!sym(property)) > (third_q + iqr_val_adj) |
+      (!!sym(property) < (first_q - iqr_val_adj))
+  ) 
+df
+```
+# Create a database from the dataframe and select properties for analysis
+
+Run the chunk below...
+
+```{r warning = FALSE, message = FALSE}
+# creating a database with the outlier
+db <- 
+  df %>% 
+  dplyr::select(-F_Top) %>% # dplyr provides a set of tools for efficiently 
+  #manipulating datasets in R
+  db.create() %>% 
+  db.locate(c(xlon, ylat), "x") %>% 
+  db.locate(names = property, loctype = "z")
+db@locators
+
+# Creating databases with no outliers
+
+db_noout.db <-
+  df %>% 
+  dplyr::select(-F_Top) %>% # provides a set of tools for efficiently 
+  # manipulating datasets in R
+  filter(outlier == FALSE) %>%  # When FALSE, outliers will be "filtered out."
+  db.create() %>% 
+  db.locate(c(xlon, ylat), "x") %>% 
+  db.locate(names = property, loctype = "z")
+
+db_noout.db # The @ is addressor in S4 like the $ in S3
+```
+
+# Create the Basemap without the outlier
+
+In this code chunk the basemap without the outlier is reproduced.
+
+**(note, you will need to replace the database db_noout.db if you want to see the impact of the outlier)**
+
+Run the chunk below...
+
+```{r, warning=FALSE}
+db.plot(
+  # db,                      # Comment out to remove outlier
+  db_noout.db,            # uncomment to remove outlier
+  name.color = property,  
+  pch = 19, 
+  pos.legend = 1,
+  cex = 0.5, 
+  xlim = c(-20000, 50000),
+  ylim = c(0, 40000),
+  xlab = "X (UTM)", 
+  ylab = "Y (UTM)", 
+  title = paste("Basemap Color-coded by", property, "with No Outlier"))#, 
+#  xlim = c(-20000, 40000))
+```
+# Outliers
+
+The code cunck below displays the histogram fro the selected variable.  Note the outlier on the far right of the histogram
+
+Run the chunk below...
+
+```{r message = FALSE, warning = FALSE}
+hist1 <- df %>%
+  filter(outlier == FALSE) %>%
+  ggplot(aes(x = !!sym(property))) +
+  geom_histogram(           #   Plots the histogram
+    aes(y = ..density..),
+    fill = "red",
+    color = "white",
+    bins = 31,             #   Smooths out the histogram and ensures center bin
+    alpha = 0.6            #   Provides transparency to histogram see CDF better
+  ) +
+  geom_density(color = "black", size = 1) +     #   Plots the Density Curve
+  stat_ecdf(
+    aes(y = ..y..),
+    color = "blue",
+    size = 1,
+    linetype = "dashed"
+  ) +                      #   Plots the CPDF overlay
+  ggtitle(sprintf("Fig 1b     %s WT Data", property)) +
+  xlab(property) +
+  ylab("Density / Cumulative Probability")
+
+hist1
+
+```
+Note the "Density" curve in black is a "Probability Distribution Function." It shows a smoothed, continuous estimate of the data distribution — helpful for spotting skewness, multimodality, or how normal (Gaussian) the data are. The blue curve is the "Cumulatie Probability distribution function" or CPDF.  
+
+# Construction of the Variograms
+
+The code chunks below calculates and plots the variograms.  Initially, they do not correct for outliers.  Replace the database (db) with the database that removes the outliers (db_noout.db). Observe the impact of the outlier. 
+
+## The Omnidirectional Experimental Semivariogram
+
+Look what happens in the variogram when you do not remove the outlier!
+To see the impact, be sure the data base is, "db".  To see the impact without the outlier, change the data base name to, "db_noout". 
+
+Run the code chunk below...
+
+
+```{r, warning = FALSE}
+vario.omni <- vario.calc(db_noout.db, nlag = 10) 
+plot(
+  vario.omni, 
+  type = "o", 
+  pch = 19, 
+  cex = .8,
+  pos.legend = 2,
+  npairpt= TRUE, 
+  npairdw= FALSE, 
+  title = paste(property, "Experimental Ominidirectional Variogram"), 
+  xlab = "Lag distance", 
+  ylab = expression(paste("Variance (", gamma, "(h))", sep="")))
+```
+# Directional Variograms
+
+## Directional Experimental Semi- Variograms
+
+The same process is followed for directional variograms.  Note, however, that the number of arguments increases and we include the multiple directions we want to assess.  When entering the directions, begin with the most northerly direction.  **If you enter only 2 directions, like c(90, 0), then RGeostats assumes you explicitly know the maximum and minimum directions of continuity.** If you enter 3 or more directions, like, C(90, 45, 0) or c(90, 60, 30, 0), RGeostats will automatically calculate the directions of continuity if you are using the function "vario_calc()" along with "model.auto()."  This is very handy and makes variogram modeling much easier.  
+
+In the code chunk below, we calculate the directional variograms for 2 directions, 3 directions, and 4 directions.  .
+
+Run the chunk below...
+
+```{r, warning = FALSE}
+#Using vario.calc() again, this time to calculate multiple specific directions 
+#such as 90, 45, and 0 degrees
+
+data.2dir.vario <- vario.calc(db_noout.db, nlag = 10, dir = c(90, 0)) 
+# using the following, c(82.3, 7.7)), instead of c(90, 0) for would be the more
+# a two dirctions solution would be the more precise directions of continuity
+plot(
+  data.2dir.vario,
+  type = "p",
+  pch = 20,
+  npairpt = TRUE,
+  npairdw = FALSE,
+  pos.legend = 2,
+  cex = .8,
+  title = paste(property, "Experimental 2 Directional Variogram"),
+  xlab = "Lag distance",
+  ylab = expression(paste("Variance (", gamma, "(h))", sep = ""))
+)
+
+data.3dir.vario <-
+  vario.calc(db_noout.db, nlag = 10, dir = c(90, 45, 0))
+plot(
+  data.3dir.vario,
+  type = "h",     # 👈  Note: type = "h" plots the histograms of the frequency
+  pch = 20,
+  npairpt = TRUE,
+  npairdw = FALSE,
+  pos.legend = 2,
+  cex = .8,
+  title = paste(property, "Experimental 3 Directional Variogram"),
+  xlab = "Lag distance",
+  ylab = expression(paste("Variance (", gamma, "(h))", sep = ""))
+)
+
+data.4dir.vario <-
+  vario.calc(db_noout.db, nlag = 10, dir = c(90, 60, 30, 0))
+plot(
+  data.4dir.vario,
+  type = "o",
+  pch = 20,
+  cex = 0.8,
+  npairpt = TRUE,
+  npairdw = FALSE,
+  legend = FALSE,       # 👈 suppress internal legend
+  title = paste(property, "Experimental 4 Directional Variogram"),
+  xlab = "Lag distance",
+  ylab = expression(paste("Variance (", gamma, "(h))", sep = ""))
+)
+
+# Add your own legend w/custom size (RGeostat has a bug, hence the workaround)
+legend(
+  "bottom",                      # or any other position
+  legend = c("0°", "45°", "90°", "135°"),  # adjust as needed
+  col = 1:4,                       # colors used for each direction
+  lty = 1,                         # line type
+  pch = 20,                        # point type
+  cex = 0.7                        # 👈 set the legend text size
+)
+```
+
+Recall that each point represents the average squared difference value for each lag.  The small numbers printed above each point is the number of pair-points that went into that lag calculation.  
+
+**End of Demo#3a-2025-SM**
