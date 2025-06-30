@@ -1,0 +1,430 @@
+---
+title: "Demo #5"
+subtitle: "Cross Validation"
+author: "Jeffrey Yarus"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document: 
+    highlight: tango
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+    toc_depth: 6
+  word_document: 
+    toc: yes
+    toc_depth: '6'
+  html_document: default
+  always_allow_html: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+# Demo Summary
+
+In this demo, the objective is to cross validate the variogram model we created previously. 
+
+**Please be sure to read through the text I have included before each code chunk.**
+
+If you wish to run the demo, be sure to**run the entire code chunk by chunk.** The variable P_PHI_pct is already in place and ready to run. The variogram model and kriging parameters are already set. **Erase your Global Environment before beginning**
+  
+**We will recreate the experimental semivariogram and variogram model from the earlier demo using ther variable, P_PHI_pct**
+
+  - Be sure you are using the appropriate database with NO outliers!
+  
+  - The objective is to evaluate the performance of your variogram model on the kriging or conditional simulation results and provide a method for selecting the "best" variogram model.
+
+  - Run the cross validation code chunks to help us determine which of several variogram model(s) work best (i.e., which generated the fewest number of over and under estimates).  The idea is to run cross validation on the variogram models you think are best.  Then, see which one generates the fewest over and under estimates.
+
+**Be careful not to overfit the variogram models.** 
+
+  - Keep in mind that selecting a bunch of variogram models and allowing the auto.fit() function from RGeostats to generate a really nice fit to the experimental variogram, does not mean that the resulting kriged map will be reasonable! There is a risk of overfitting.  As a rule of thumb, when using auto.fit(), selecting fewer model-types to evaluate is generally better than selecting many.
+
+**reproduce the omnidirectional kriged map** for P_PHI and its Error Variance (Standard Deviation) Maps using the "best" variogram model you constructed. Be sure you update (change) the various titles, axes names, input names, as appropriate within the body of each chunk where appropriate. 
+  
+# Terminology and key functions from this Demo
+
+1. **Cross Validation** or, "leave one out"
+  - A bootstrapping method that will assess the value of each known sample one at a time and compare the estimated value with the actual value.  The estimated value should be within 2.5 standard deviations of the known value.  At the end of the analysis, a number of graphical statistics are presented.  The preferred variogram model is the one with the least number of over or under estimates 
+  
+2. **Estimation Error**
+  - The estimation error is the difference between the actual value and the estimated value
+
+3. **Standard Error-Estimation Error**
+  - The standardized error is the normalized error in units of standard deviation
+
+# Loading Packages
+
+```{r include = FALSE}
+library(corrplot)
+library(PerformanceAnalytics)
+library(tidyverse)
+library(fastDummies)
+library(magrittr)
+library(GGally)
+library(ggplot2)
+library(RColorBrewer)
+library(knitr)
+library(ggpubr)
+library(gstlearn)
+library(gridGraphics)
+library(here)
+```
+
+```{r}
+getwd()
+```
+
+# Initializing the Demo
+
+As in the previous demos, we:
+
+  - Read in our data
+  - Create the data frame (tibble)
+  - Ensure our categorical variables (if present) are designated as factors
+  - Create a backup data frame
+  - Remove the unnecessary variables from the tibble
+  - Create our assigned symbolic names
+  - Identify the outliers.
+  
+  Run the chunk below...BE SURE TO SET THE PATH CORRECTLY!
+```{r }
+file.name <- "../../data/WT-2D-all-outlier.csv" 
+df <- read_csv(file.name)
+df %<>% 
+   mutate(across(matches("N_|L_"), factor))
+
+# Creating a duplicate data frame for later use, but eliminate unnecessary variables
+
+df2 <- df %>%  
+  dplyr::select(L_3_FACIES:P_Top_ft)
+
+# Creating Symbolic Inputs
+
+xlon <- "C_X_ft"
+ylat <- "C_Y_ft"
+property <- "P_PHI_pct"
+head(df, n = 20)
+
+# Idnetifying the outliers
+
+df <-
+  df %>%
+  mutate(
+    iqr_val = IQR(!!sym(property)),
+    iqr_val_adj = ((iqr_val) * 1.5),
+    third_q = quantile(!!sym(property), prob = 0.75, na.rm = TRUE),
+    first_q = quantile(!!sym(property), prob = .25, na.rm = TRUE),
+    outlier =
+      (!!sym(property)) > (third_q + iqr_val_adj) |
+      (!!sym(property) < (first_q - iqr_val_adj))) %>%
+    mutate(Log_property = log(!!sym(property)))
+```
+
+#  Working in R S4 - Preparation for Geostatistical Analysis using RGeostats
+
+## Database
+
+The following chunk creates a database **that does not include outliers**
+
+## Creating databases with no outliers
+
+Here, we "filter out" the outliers (when they are present)
+
+```{r warning = FALSE}
+# Creating databases with no outliers
+# Remove the first variable
+df1 = df %>% dplyr::select(-F_Top) %>% filter(outlier == FALSE)
+
+# creating a database with the outlier from the Data Frame
+db_noout.db = Db_fromTL(df1)
+
+# Define the different variables
+err = db_noout.db$setLocators(c(xlon, ylat), ELoc_X())
+err = db_noout.db$setLocator(property, ELoc_Z())
+db_noout.db 
+```
+
+## Plotting a basemap from a database
+
+We will plot the basemap to ensure we have identified and removed outliers
+
+```{r, warning=FALSE}
+p = plot.init(asp=1)
+p = p + plot.symbol(db_noout.db, nameColor = property, pch = 19, cex = 1, flagLegend = TRUE)
+p = p + plot.decoration(title=paste("Basemap of", property, "with No Outlier"), xlab = "X (UTM)", ylab = "Y (UTM)")
+plot.end(p)
+```
+
+The basemap looks good, so we will continue and recreate
+To determine the ceiling of the grid (or the coordinates of the upper-right corner), I wrote a roundUp() function that takes the largest value in both selected x-coordinate (C_X) and y-coordinate (C_Y) column and find the nearest 10, 100, 1000, etc. that's larger than the largest value
+
+## Determining the extents of the data for grid constructon 
+
+## Construction of the Variograms
+
+### Omnidirectional Variogram Model 
+
+Be sure to look at the information printed out on the omnidirectional variogram 
+The code used here is similar to what would be used for directional variograms
+
+Run the chunk below...
+
+```{r, warning = FALSE}
+varioparam <- VarioParam_createOmniDirection(nlag = 10, dlag=2000)
+vario_omni <- Vario_computeFromDb(varioparam, db_noout.db)
+
+p = plot.init()
+p = p + plot.vario(vario_omni, drawPlabel = TRUE)
+p = p + plot.decoration(title = paste(property, "Experimental Ominidirectional Variogram"), 
+                        xlab = "Lag distance", 
+                        ylab = expression(paste("Variance (", gamma, "(h))", sep="")))
+plot.end(p)
+```
+
+# Visualizing the variogram model
+
+## Select model type for this data set:
+
+Here I have selected a the Exponential (#2) model for the demo.  However, that may not be the correct variogram model.  You will need to select from the variogram list what you believe to be the "best" variogram model that you will then validate through cross validation. 
+
+Make your variogram selection in this code chunk. It's possible to include more than 1 basic structure to fit the model with, the program will calculate and pick out the one that fits best.  In the chunk below, I have specified only one variogram model type.  If you specify more than one, the fitting algorithm will decide which one or which one or combinations are best.  Be careful, the algorithm will be inclined to build nested structures to precisely fit the experimental variogram, so overfitting is very possible!  Less is generally better. **Also note that the specification of the variogram(s) can be done by explicitly naming the ones you want (in quotes), or by listing the numbers from the variogram list above.  In the code chunk below, I am selecting only the Stable variogram model.  That may not necessarily be the correct model for other variables!**
+
+```{r}
+ECov_printAll()
+```
+Select the variogram model(s) you wish to use
+
+```{r}
+types = ECov_fromKeys(c("NUGGET", "EXPONENTIAL", "SPHERICAL", "CUBIC"))
+```
+
+## Understanding the Variogram Model
+
+### Omnidirectional Variogram Model 
+
+```{r, warning = FALSE}
+data.model.omni <- Model()
+err = data.model.omni$fit(vario_omni, types=types)
+data.model.omni
+
+# Step 2: Plot experimental variogram
+p = plot.init() 
+p = p + plot.varmod(vario_omni, data.model.omni, flagLegend = TRUE)
+p = p + plot.decoration(title = paste(property, "Model Omnidirectional"), xlab = "Lag distance",
+                        ylab = expression(paste("Variance (", gamma, "(h))", sep = "")))
+plot.end(p)
+```
+
+When performing cross validation, a neighborhood must be defined.  Recall, the neighborhood defines the region within which samples are selected for use in the kriging estimation algorithm.  In this case, the data set is considered small, so we can simply use a "unique" or "global" neighborhood, meaning use all the samples in the data set.
+
+# Neighborhood design
+
+The choice of neighborhood  and the neighborhood design is important, particularly when there is a lot of data.  The basic choices are either a **Unique** neighborhood or a **Moving** neighborhood.  A unique, or global neighborhood requires essentially no parameterization and uses all the sample data. This could be problematic if there were a lot of data as it would greatly slow the computational time. In this case, there are only 261 samples and this is considered quite small, so we will use the unique neighborhood option. A moving neighborhood is more efficient when dealing with large data sets.  However, it requires more parameterization like; the size of the search circle or ellipse, the number of sectors that divide the neighborhood in to equal size compartments, the optimal number of samples to gather in each sector, and the optimal number of samples to gather overall.  
+
+In the chunk below, we're going to create a unique neighborhood using function neigh.create() with type "0" for Unique Neighborhood and nidm = 2 for 2-Space Dimensions
+
+```{r}
+neigh.unique <- NeighUnique_create()
+```
+
+We can also create a moving neighborhood that we can use for comparison.  Recall that a moving neighborhood restricts the selected neighboring points to those closer to the estimation node.  In this case, selecting up to the closest 50 neighbors within 10,000m of the estimation node.   
+
+```{r}
+myneigh <- NeighMoving_create(nmaxi=50, radius=10000)
+```
+
+Here we create a second database (db_noout.db2) so we preserve the original
+
+```{r, warning = FALSE}
+db_noout.db2 <- 
+  db_noout.db
+```
+
+# Evaluation of the variogram using Cross Validation
+
+The function xvalid() in gstlearn produces estimates of the known sample data.  It does this by dropping one sample value at a time and using the neighboring data along with the kriging algorithm to re-estimate it.  This way we can compare the actual values to the kriging estimates.  Recall that kriging requires a variogram which we have modeled using the code above.  If we change the variogram model, the estimates will change.  We can construct different variogram models and run the xvalid() (cross validation) exercise to help us determine which variogram model works best. 
+
+The code produces a set of new variables that are listed in the database identified for the cross validation, in this case db_noout.db2.  The new variables are as follows: 
+
+  - estim:      Estimated value
+  - stderr:     Standardized Error (sometimes referred to as the standardized residual), the deviation of an
+                observed
+                value from its expected value, scaled by the standard deviation of the error term (the difference
+                between an observed value and its expected value, divided by the standard deviation of the error term:
+                (Z*-Z)/S).  Don't confuse this with, "Standard Error," which refers to the variability or dispersion of
+                a sample statistic relative to the true population parameter.  
+  - esterr:     Estimation Error, the difference between the predicted value generated by a model and the true value of
+                the target variable accounting for factors such as bias, variance, and irreducible error that may
+                influence the model's performance on unseen data.
+  - stdev:      Standard Deviation (S)
+  
+In this code chunk, we select the appropriate variable location for the db.locate() function.  **For P_PHI_pct, the location is, "9".** If you select another variable, like P_KH_md, **the location is, "8".** To see a list of the variables and their positions, you can open the twisty for db_noout.db2 in the Global Environment and count the variables listed under @items  
+
+```{r warning = FALSE}
+err = db_noout.db2$clearLocators(ELoc_Z())
+err = db_noout.db2$setLocator(property, ELoc_Z())
+err = xvalid(db = db_noout.db2, 
+    model = data.model.omni,
+    neigh = neigh.unique,    # comment-out to check Moving Neighborhood
+#    myneigh,                # Uncomment to check Moving Neighborhood
+    flag_xvalid_est = -1,    # If 1, (Z*-Z, esterr). If -1, (Z*, est)
+    flag_xvalid_std = -1,    # If 1, (Z*-Z)/S. If -1, (S) S = Std Dev of est error
+    namconv = NamingConvention("XvalUniq1")     # comment-out to check Moving Neighborhood
+#    namconv = NamingConvention("XvalMov1")     # Uncomment to check Moving Neighborhood
+  )
+
+err = db_noout.db2$clearLocators(ELoc_Z())
+err = db_noout.db2$setLocator(property, ELoc_Z())
+err = xvalid(db = db_noout.db2, 
+    model = data.model.omni,
+    neigh = neigh.unique,    # comment-out to check Moving Neighborhood
+#    myneigh,                # Uncomment to check Moving Neighborhood
+    flag_xvalid_est = 1,    # If 1, (Z*-Z, esterr). If -1, (Z*, est)
+    flag_xvalid_std = 1,    # If 1, (Z*-Z)/S. If -1, (S) S = Std Dev of est error
+    namconv = NamingConvention("XvalUniq1")     # comment-out to check Moving Neighborhood
+#    namconv = NamingConvention("XvalMov1")     # Uncomment to check Moving Neighborhood
+  )
+db_noout.db2
+```
+
+**If you select a different variable to analyze**
+
+You will need to change the name of the estimation variable. The code will generate the following variables: The estimate (estim), the standard deviation value (stdev), the estimation error value (esterr), and the standard error value (stderr) to match the variable being analyzed.  
+
+The radix argument simply provides a file identifier.  Here, I used the radix = Uniq1 to signify that the analysis was run using a unique neighborhood.  If you use the moving neighborhood, then I used radix = XvalMov2.  You can create any radix you wish, but be consistent.
+
+For example, if you wish to analyze P_Kh_md, you would make the following changes to the code chunk below
+
+  -XvalUniq1.P_PHI_pct.estim --> XvalUniq1.P_KH_md.estim
+  
+  -XvalUniq1.P_PHI_pct.stdev --> XvalUniq1.P_KH_md.stdev
+  
+  -XvalUniq1.P_PHI_pct.esterr --> XvalUniq1.P_KH_md.esterr
+  
+  -XvalUniq1.P_PHI_pct.stderr --> XvalUniq1.P_KH_md.stderr
+  
+## Graphical results of Cross Validation
+
+It is possible to display the various cross validation results using the S4 functions in RGeostat.  However, sometimes it's easier to use S3 functions like those of ggplot2.  So, the code below converts the database (db) into a data frame (df).  To do that, I am simply extracting the values we created and placed them in db_noout.db3 under **items@** and assigning them to a data frame called, **df_db_noout
+
+```{r, message = FALSE, warning = FALSE}
+df_db_noout <- db_noout.db2$toTL()
+
+P_property <- 
+  df_db_noout %>%
+  ggplot(aes
+  (!!sym(property))) +
+  geom_histogram(
+    fill = "red", 
+    color = "white",
+    bins = 21) +
+  xlim(0,15)
+
+P_estim <- 
+  df_db_noout %>%
+    ggplot(
+      aes(
+       XvalUniq1.P_PHI_pct.estim)) +  #change to Xvalid.P_KH_md.estim
+  geom_histogram(
+    fill = "red", 
+    color = "white",
+    bins = 21) +
+  xlim(0,15)
+
+P_stdev <- 
+  df_db_noout %>%
+  ggplot(
+    aes(
+      XvalUniq1.P_PHI_pct.stdev)) + #change to Xvalid.P_KH_md.stdev
+  geom_histogram(
+    fill = "red", 
+    color = "white",
+    bins = 21)
+
+P_esterr <- 
+  df_db_noout %>%
+  ggplot(
+    aes(
+      XvalUniq1.P_PHI_pct.esterr)) + #change to Xvalid.P_KH_md.esterr
+  geom_histogram(
+    fill = "red", 
+    color = "white",
+    bins = 21) +
+    annotate("rect", xmin = -4.5, xmax = -2.5, ymin = 0, ymax = 4.8,
+           alpha = .5,fill = "darkblue") +
+    annotate("rect", xmin = 2.7, xmax = 5.0, ymin = 0, ymax = 4,
+           alpha = .5,fill = "darkblue")
+
+P_stderr <- 
+  df_db_noout %>%
+  ggplot(
+    aes(
+      XvalUniq1.P_PHI_pct.stderr)) + #change to Xvalid.P_KH_md.stderr
+  geom_histogram(
+    fill = "red", 
+    color = "white",
+    bins = 21) +
+    annotate("rect", xmin = -4.5, xmax = -2.5, ymin = 0, ymax = 4.8,
+           alpha = .5,fill = "darkblue") +
+    annotate("rect", xmin = 2.7, xmax = 5.0, ymin = 0, ymax = 4,
+           alpha = .5,fill = "darkblue")
+
+P_cross <- 
+df_db_noout %>%
+  ggplot(
+    aes(
+      x = !!sym(property), 
+      y = XvalUniq1.P_PHI_pct.estim)) + #change to Xvalid.P_KH_md.estim
+  geom_point(
+    col = "blue") +
+  geom_smooth(
+    method = 'lm',
+    col = "red",
+    formula = y ~ x,
+    se = FALSE
+  ) +
+  labs(y = "Estimated PHI") #change to "Estimated KH"
+
+ggarrange(
+  P_property + 
+    theme(
+      axis.title.y = element_blank()),
+  P_estim + 
+    theme(axis.title.y = element_blank()),
+  P_stdev + 
+    theme(axis.title.y = element_blank()),
+  P_esterr + 
+    theme(axis.title.y = element_blank()),
+  P_stderr + 
+    theme(axis.title.y = element_blank()),
+  P_cross + 
+    theme()
+)
+```
+
+We cam also use the S4 objects in RGeostats.  We use the draw.xvalid function to produce the basemap below which annotates in red the over and under estimates
+
+Using S4, we can look more closely at a few statistical graphs to see the estimates that are beyond +/- 2.5 standard deviations from mean.  First, the standardized error graph, then the cross plot of the standardized error against the estimated values, and finally, the cross plot of the estimated values against the actual values 
+
+```{r warning = FALSE}
+p = plot.init(asp=1)
+p = p + plot.symbol(db_noout.db, nameSize = "*.stderr", flagAbsSize=TRUE, pch = 21)
+p = p + plot.decoration(title="Standardized Error (abs) - Threshold = 2.5")
+# Add the outliers in other color
+plot.end(p)
+
+p = plot.init(asp=1)
+p = p + plot.correlation(db_noout.db, namex = "*.estim", namey = "*stderr", asPoint = TRUE)
+p = p + plot.decoration(title="(Z-Z*)/S* vs. Z*")
+plot.end(p)
+
+p = plot.init(asp=1)
+p = p + plot.correlation(db_noout.db, namex = "*.estim", namey = property, asPoint = TRUE)
+p = p + plot.decoration(title="Z vs. Z*")
+plot.end(p)
+```
+
+Look at the various graphs just produced.  The red values are those data samples where the estimates are more than 2.5 standard deviations from the mean except for the second image where I set the threshold to 1.5  
+
+From here, we can try different variogram model types to see which generated the fewest over and under estimates.  NOTE: Fewer over and under estimates is a very mechanical way of determining which variogram model is best. In practice, you should use your best judgement as a domain expert to make a final decision  
+**End of Demo #5**

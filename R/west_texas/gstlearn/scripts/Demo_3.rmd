@@ -122,7 +122,6 @@ db = Db_fromTL(df1)
 # Define the different variables
 err = db$setLocators(c(xlon, ylat), ELoc_X())
 err = db$setLocator(property, ELoc_Z())
-
 db
 ```
 
@@ -138,7 +137,6 @@ db_noout.db = Db_fromTL(df1)
 # Define the different variables
 err = db_noout.db$setLocators(c(xlon, ylat), ELoc_X())
 err = db_noout.db$setLocator(property, ELoc_Z())
-
 db_noout.db 
 ```
 
@@ -150,24 +148,9 @@ In this code chunk the basemap without the outlier is reproduced.
 
 Run the chunk below...
 
-```{r}
-p = plot.init(asp=1)
-p = p + plot.symbol(db, nameColor=property)
-p = p + plot.decoration(title="Display of Grid Nodes")
-plot.end(p)
-```
-
-
 ```{r, warning=FALSE}
 p = plot.init(asp=1)
-p = p + plot.symbol(
-  # db,                      # Comment out to remove outlier
-  db_noout.db,               # Uncomment to remove outlier
-  nameColor = property,
-  pch = 19,
-  cex = 0.5, 
-  flagLegend = TRUE)
-p = p + plot.geometry(xlim = c(-20000, 50000), ylim = c(0, 40000))
+p = p + plot.symbol(db_noout.db, nameColor = property, pch = 19, cex = 1, flagLegend = TRUE)
 p = p + plot.decoration(title=paste("Basemap of", property, "with No Outlier"), xlab = "X (UTM)", ylab = "Y (UTM)")
 plot.end(p)
 ```
