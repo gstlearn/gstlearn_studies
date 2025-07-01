@@ -194,8 +194,12 @@ db_noout.db = Db_fromTL(df1)
 # Define the different variables
 err = db_noout.db$setLocators(c(xlon, ylat), ELoc_X())
 err = db_noout.db$setLocator(property, ELoc_Z())
-db_noout.db 
+db_noout.db
+```
 
+Plot the property of interest from the data base
+
+```{r}
 p = plot.init(asp=1)
 p = p + plot.symbol(db_noout.db, nameColor = property, pch = 19, cex = 1, flagLegend = TRUE)
 p = p + plot.decoration(title=paste("Basemap of", property, "with No Outlier"), xlab = "X (UTM)", ylab = "Y (UTM)")
@@ -215,7 +219,11 @@ Run the chunk below...
 ```{r, warning = FALSE}
 varioparam <- VarioParam_createOmniDirection(nlag = 10, dlag=2000)
 vario_omni <- Vario_computeFromDb(varioparam, db_noout.db)
+```
 
+Represent the variogram
+
+```{r}
 p = plot.init()
 p = p + plot.vario(vario_omni, drawPlabel = TRUE)
 p = p + plot.decoration(title = paste(property, "Experimental Ominidirectional Variogram"), 
@@ -232,13 +240,6 @@ Run the chunk below...
 
 ```{r}
 ECov_printAll()
-```
-
-
-Run the chunk below... Note the assignment variable, **"struct"** is then seen in the **Values section** of the Global Environment.
-
-```{r}
-struct <- c(2)
 ```
 
 Note, if you included many basic structures into the auto-fitting algorithm of RGeostats, model.auto() will try to fit every included structure and pick out the best fit to plot with the experimental variogram.
@@ -260,7 +261,6 @@ data.model.omni
 We can more fully annotate the variograms; change the curve colors, line type and width, subtitles, enhanced legends, etc. Below is an example. 
 
 ```{r warning = FALSE}
-# Step 2: Plot experimental variogram
 p = plot.init() 
 p = p + plot.varmod(vario_omni, data.model.omni, flagLegend = TRUE)
 p = p + plot.decoration(title = paste(property, "Model Omnidirectional"), xlab = "Lag distance",
@@ -313,8 +313,7 @@ Run the chunk below...
 
 ```{r, warning = FALSE}
 dbgrid2 <- DbGrid_createCoveringDb(db_noout.db,dx=c(100,100))
-err = migrateMulti(dbin = db_noout.db, dbout = dbgrid2, 
-                   names = c("L*", "D*", "P*"), namconv = NamingConvention(""))
+dbgrid2
 ```
 
 ## Kriging the variable of interest

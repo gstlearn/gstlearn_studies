@@ -50,13 +50,11 @@ library(gstlearn)
 library(here)
 ```
 
-
 ```{r, eval=FALSE}
 setwd('/mnt/vstor/CSE_MSE_RXF131/cradle-members/sdle/jmy41/GIT/jmy-research/topics/RPS_N58')
 
 getwd()
 ```
-
 
 As in the previous demos, we:
 
