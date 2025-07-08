@@ -213,7 +213,7 @@ plot.end(p)
 
 ## Directional Experimental Semi- Variograms
 
-The same process is followed for directional variograms.  Note, however, that the number of arguments increases and we include the multiple directions we want to assess.  When entering the directions, begin with the most northerly direction.  **If you enter only 2 directions, like c(90, 0), then gstlearn assumes you explicitly know the maximum and minimum directions of continuity.** If you enter 3 or more directions, like, C(90, 45, 0) or c(90, 60, 30, 0), gstlearn will automatically calculate the directions of continuity if you are using the function "vario_calc()" along with "model.auto()."  This is very handy and makes variogram modeling much easier.  
+The same process is followed for directional variograms.  Note, however, that the number of arguments increases and we include the multiple directions we want to assess.  When entering the directions, begin with the most northerly direction.  **If you enter only 2 directions, like c(90, 0), then gstlearn assumes you explicitly know the maximum and minimum directions of continuity.** If you enter 3 or more directions, like, C(90, 45, 0) or c(90, 60, 30, 0), gstlearn will automatically calculate the directions of continuity if you are using the function "Vario_computeFromDb" along with "Model_fit". This is very handy and makes variogram modeling much easier.  
 
 In the code chunk below, we calculate the directional variograms for 2 directions, 3 directions, and 4 directions.  .
 

@@ -37,7 +37,7 @@ If you wish to run the demo, be sure to **run the entire code chunk by chunk.** 
 
 **Be careful not to overfit the variogram models.** 
 
-  - Keep in mind that selecting a bunch of variogram models and allowing the automatic fitting function from *gstlearn* to generate a really nice fit to the experimental variogram, does not mean that the resulting kriged map will be reasonable! There is a risk of overfitting.  As a rule of thumb, when using automatic fitting procedure, selecting fewer model types to evaluate is generally better than selecting many.
+  - Keep in mind that selecting a bunch of variogram models and allowing the automatic fitting function from *gstlearn* to generate a really nice fit to the experimental variogram, does not mean that the resulting kriged map will be reasonable! There is a risk of overfitting. As a rule of thumb, when using automatic fitting procedure, selecting fewer model types to evaluate is generally better than selecting many.
 
 **Reproduce the kriged map for isotropic Model** for P_PHI and its Error Variance (Standard Deviation) Maps using the "best" variogram model you constructed. Be sure you update (change) the various titles, axes names, input names, as appropriate within the body of each chunk where appropriate. 
   

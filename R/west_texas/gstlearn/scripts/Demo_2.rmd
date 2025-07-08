@@ -1,13 +1,17 @@
 ---
-title: "Demonstration #2"
-date: "`r format(Sys.time(), '%d %B, %Y')`"
+title: 'Demonstration #2'
 author: "Jeffrey Yarus"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
+  html_document:
+    toc: true
+    toc_depth: '6'
+    df_print: paged
   pdf_document:
     highlight: tango
     latex_engine: xelatex
-    number_sections: yes
-    toc: yes
+    number_sections: true
+    toc: true
     toc_depth: 6
 subtitle: 'Exploratory Data Analytics: outliers'
 ---

@@ -162,7 +162,7 @@ Run the code chunk below **if the variable you have selected is log-nomrally dis
 ________________________________________________________________________________
 ________________________________________________________________________________
 
-#  Working in R S4 - Preparation for Geostatistical Analysis using RGeostats
+#  Working in R S4 - Preparation for Geostatistical Analysis using gstlearn
 
 ## Creating the Databases and Basemap
 
@@ -242,7 +242,7 @@ Run the chunk below...
 ECov_printAll()
 ```
 
-Note, if you included many basic structures into the auto-fitting algorithm of RGeostats, model.auto() will try to fit every included structure and pick out the best fit to plot with the experimental variogram.
+Note, if you included many basic structures into the auto-fitting algorithm of gstlearn, "Model_fit" function (called below using "data.model.omni$fit" method) will try to fit every included structure and pick out the best fit to plot with the experimental variogram.
 
 ### Omnidirectional Variogram Model 
 

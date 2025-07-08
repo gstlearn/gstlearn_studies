@@ -260,9 +260,9 @@ db_noout.db$display(dbfmt)
 
 # Selection of the Variogram Model types to be used
 
-If you include many basic structures (variogram model types) into the auto-fitting algorithm of RGeostats, model.auto() will test each of the structures you specify and determine which structure or combination of structures are best used to model the experimental semivariogram. That said, keep in mind that selecting many structures may cause overfitting.  The suggestion I propose is to limit the number of variogram model types to no more than 3 or 4.  
+If you include many basic structures (variogram model types) into the auto-fitting algorithm of gstlearn, "fit" function will test each of the structures you specify and determine which structure or combination of structures are best used to model the experimental semivariogram. That said, keep in mind that selecting many structures may cause overfitting.  The suggestion I propose is to limit the number of variogram model types to no more than 3 or 4.  
 
-Make your variogram model type selections in this code chunk.  Be sure that if you specify the variogram model name that the name is spelled correctly and that it is in quotes.  
+Make your variogram model type selections in this code chunk. Be sure that if you specify the variogram model name that the name is spelled correctly and that it is in quotes.  
 
 ```{r warning = FALSE}
 varioparam <- VarioParam_createMultiple(ndir=4, nlag = 10, dlag=2000)
