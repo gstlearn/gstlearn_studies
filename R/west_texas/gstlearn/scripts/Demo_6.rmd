@@ -341,7 +341,7 @@ plot.end(p)
 Note what is inside SimGrid_mean_dir in the environment panel.  It now has all 11 realizations and it has the mean of the realizations.
 
 ```{r, warning = FALSE, message = FALSE}
-err = dbgrid2$statisticsBySample(dbgrid2$getNamesNew(ERole_Z()),
+err = dbgrid2$statisticsBySample(dbgrid2$getNames(ERole_Z()),
                                  opers = EStatOption_fromKeys(c("MEAN", "STDV")))
 ```
 
